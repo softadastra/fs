@@ -6,15 +6,11 @@ The `fs` module is responsible for **observing and describing changes in the loc
 
 It is the **entry point of all local data changes** in Softadastra systems.
 
----
-
 ## Purpose
 
 The goal of `softadastra/fs` is simple:
 
 > Detect changes in a directory and emit structured, reliable events.
-
----
 
 ## Core Principle
 
@@ -28,8 +24,6 @@ This module:
 
 It does **not** decide what to do with them.
 
----
-
 ## Responsibilities
 
 The `fs` module provides:
@@ -41,8 +35,6 @@ The `fs` module provides:
 * Snapshot comparison (diff)
 * Path utilities
 
----
-
 ## What this module does NOT do
 
 * No sync logic (sync module)
@@ -52,34 +44,24 @@ The `fs` module provides:
 
 👉 It is a pure observation layer.
 
----
-
 ## Design Principles
 
 ### 1. Passive
 
 The module observes changes but never triggers business logic.
 
----
-
 ### 2. Deterministic
 
 Given the same filesystem state, it must produce the same results.
-
----
 
 ### 3. Reliable
 
 * Duplicate events are acceptable
 * Missing events are not
 
----
-
 ### 4. Decoupled
 
 No dependency on higher-level modules.
-
----
 
 ## Module Structure
 
@@ -94,8 +76,6 @@ modules/fs/
 └── src/
 ```
 
----
-
 ## Core Components
 
 ### Watcher
@@ -108,8 +88,6 @@ Detects:
 * File modification
 * File deletion
 
----
-
 ### Scanner
 
 Performs an initial scan of a directory.
@@ -118,8 +96,6 @@ Used for:
 
 * Bootstrapping state
 * Rebuilding snapshots
-
----
 
 ### FileState
 
@@ -132,8 +108,6 @@ Includes:
 * Last modified time
 * Optional hash
 
----
-
 ### Snapshot
 
 Represents the full state of a directory.
@@ -144,8 +118,6 @@ Used to:
 * Detect differences
 * Feed the sync engine
 
----
-
 ### PathUtils
 
 Utility helpers for:
@@ -153,8 +125,6 @@ Utility helpers for:
 * Path normalization
 * Relative / absolute resolution
 * Cross-platform handling
-
----
 
 ## Event Model
 
@@ -168,8 +138,6 @@ Events can come from:
 
 * Real-time watcher
 * Snapshot diff
-
----
 
 ## Example Usage
 
@@ -187,16 +155,12 @@ watcher.onEvent([](const FileEvent& event) {
 watcher.start();
 ```
 
----
-
 ## Integration
 
 Used by:
 
 * sync (primary consumer)
 * metadata (indirectly via sync)
-
----
 
 ## Reliability Strategy
 
@@ -205,8 +169,6 @@ To guarantee correctness:
 * Watcher captures real-time events
 * Snapshot diff acts as a fallback
 * Event coalescing reduces noise
-
----
 
 ## Dependencies
 
@@ -222,16 +184,12 @@ To guarantee correctness:
   * macOS: FSEvents (planned)
   * Windows: ReadDirectoryChangesW (planned)
 
----
-
 ## MVP Scope
 
 * Single directory watcher
 * Basic file events
 * Snapshot diff support
 * No advanced rename detection
-
----
 
 ## Roadmap
 
@@ -241,8 +199,6 @@ To guarantee correctness:
 * Large directory optimization
 * Smarter event batching
 
----
-
 ## Rules
 
 * Never trigger sync directly
@@ -250,15 +206,11 @@ To guarantee correctness:
 * Never assume event completeness
 * Always allow reconciliation via snapshot
 
----
-
 ## Philosophy
 
 The `fs` module is the **eyes of the system**.
 
 > It observes everything, but decides nothing.
-
----
 
 ## Summary
 
@@ -267,7 +219,11 @@ The `fs` module is the **eyes of the system**.
 * Feeds the sync engine
 * Fully decoupled
 
----
+## Installation
+
+```bash
+vix add @softadastra/fs
+```
 
 ## License
 

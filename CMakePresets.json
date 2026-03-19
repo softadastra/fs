@@ -1,67 +1,43 @@
 {
-  "version": 3,
-  "cmakeMinimumRequired": {
-    "major": 3,
-    "minor": 20,
-    "patch": 0
-  },
+  "version": 6,
   "configurePresets": [
     {
-      "name": "base",
-      "hidden": true,
+      "name": "dev-ninja",
+      "displayName": "Dev (Ninja, Debug)",
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/${presetName}",
-      "cacheVariables": {
-        "CMAKE_CXX_STANDARD": "20",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
-      }
-    },
-    {
-      "name": "dev",
-      "inherits": "base",
-      "displayName": "Development",
+      "binaryDir": "build-ninja",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "SOFTADASTRA_FS_BUILD_TESTS": "ON"
       }
     },
     {
-      "name": "release",
-      "inherits": "base",
-      "displayName": "Release",
+      "name": "release-ninja",
+      "displayName": "Release (Ninja)",
+      "generator": "Ninja",
+      "binaryDir": "build-ninja-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "SOFTADASTRA_FS_BUILD_TESTS": "OFF"
-      }
-    },
-    {
-      "name": "relwithdebinfo",
-      "inherits": "base",
-      "displayName": "Release with Debug Info",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "SOFTADASTRA_FS_BUILD_TESTS": "OFF"
       }
     }
   ],
   "buildPresets": [
     {
-      "name": "dev",
-      "configurePreset": "dev"
+      "name": "dev-ninja",
+      "displayName": "Build (Dev, Ninja)",
+      "configurePreset": "dev-ninja"
     },
     {
-      "name": "release",
-      "configurePreset": "release"
-    },
-    {
-      "name": "relwithdebinfo",
-      "configurePreset": "relwithdebinfo"
+      "name": "release-ninja",
+      "displayName": "Build (Release, Ninja)",
+      "configurePreset": "release-ninja"
     }
   ],
   "testPresets": [
     {
-      "name": "dev",
-      "configurePreset": "dev",
+      "name": "dev-ninja",
+      "configurePreset": "dev-ninja",
       "output": {
         "outputOnFailure": true
       }

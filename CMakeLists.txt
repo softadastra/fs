@@ -22,12 +22,14 @@ target_compile_features(softadastra_fs PUBLIC cxx_std_20)
 # ========================
 # Dependencies
 # ========================
-# Core is REQUIRED
-find_package(softadastra_core REQUIRED)
+# ========================
+# Core (monorepo)
+# ========================
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../core build_core)
 
 target_link_libraries(softadastra_fs
     PUBLIC
-        softadastra::core
+        softadastra_core
 )
 
 # ========================
@@ -108,6 +110,15 @@ set_target_properties(softadastra_fs PROPERTIES
 # Namespacing (important)
 # ========================
 add_library(softadastra::fs ALIAS softadastra_fs)
+
+# ========================
+# Examples
+# ========================
+option(SOFTADASTRA_FS_BUILD_EXAMPLES "Build fs examples" ON)
+
+if (SOFTADASTRA_FS_BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
 
 # ========================
 # Tests

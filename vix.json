@@ -1,0 +1,40 @@
+{
+  "name": "fs",
+  "namespace": "softadastra",
+  "version": "1.0.0",
+  "type": "library",
+  "include": "include",
+  "license": "MIT",
+  "description": "Filesystem observation and change detection layer for Softadastra. Provides snapshotting, diffing, file events, and cross-platform watchers designed for reliable, offline-first synchronization systems.",
+  "keywords": [
+    "softadastra",
+    "fs",
+    "filesystem",
+    "watcher",
+    "file-watching",
+    "snapshot",
+    "diff",
+    "file-events",
+    "inotify",
+    "polling",
+    "cross-platform",
+    "synchronization",
+    "offline-first",
+    "deterministic",
+    "change-detection",
+    "file-monitoring",
+    "c++",
+    "cpp",
+    "c++20",
+    "systems",
+    "infrastructure",
+    "library"
+  ],
+  "repository": "https://github.com/softadastra/fs",
+  "authors": [
+    {
+      "name": "Gaspard Kirira",
+      "github": "Gaspardkirira"
+    }
+  ]
+}
