@@ -58,6 +58,7 @@ namespace softadastra::fs::watcher
       current_snapshot_ = std::move(initial.value());
 
       running_ = true;
+
       worker_ = std::thread([this]()
                             { loop(); });
 
@@ -131,7 +132,7 @@ namespace softadastra::fs::watcher
     std::thread worker_;
     std::atomic<bool> running_{false};
 
-    std::chrono::milliseconds interval_{1000};
+    std::chrono::milliseconds interval_{100};
   };
 
 } // namespace softadastra::fs::watcher

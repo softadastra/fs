@@ -9,17 +9,17 @@
 #include <thread>
 #include <atomic>
 #include <vector>
+#include <cstring>
 
 #include <softadastra/fs/watcher/IWatcherBackend.hpp>
-#include <softadastra/fs/snapshot/SnapshotBuilder.hpp>
-#include <softadastra/fs/snapshot/SnapshotDiff.hpp>
 #include <softadastra/fs/events/EventBatch.hpp>
+#include <softadastra/fs/events/FileEvent.hpp>
+#include <softadastra/fs/types/FileEventType.hpp>
 
 namespace softadastra::fs::watcher
 {
-  namespace fs = std::filesystem;
-  namespace snapshot = softadastra::fs::snapshot;
   namespace events = softadastra::fs::events;
+  namespace types = softadastra::fs::types;
   namespace result = softadastra::core::types;
   namespace errors = softadastra::core::errors;
 
@@ -70,14 +70,6 @@ namespace softadastra::fs::watcher
             "Failed to add watch"));
       }
 
-      auto initial = snapshot::SnapshotBuilder::build(root_);
-      if (initial.is_err())
-      {
-        return Result::err(initial.error());
-      }
-
-      current_snapshot_ = std::move(initial.value());
-
       running_ = true;
       worker_ = std::thread([this]()
                             { loop(); });
@@ -124,49 +116,74 @@ namespace softadastra::fs::watcher
 
         if (length <= 0)
         {
-          std::this_thread::sleep_for(std::chrono::milliseconds(100));
+          std::this_thread::sleep_for(std::chrono::milliseconds(10));
           continue;
         }
 
-        // On ne traite pas chaque event individuellement
-        // → on rescan + diff (plus fiable)
+        events::EventBatch batch;
 
-        auto next = snapshot::SnapshotBuilder::build(root_);
-        if (next.is_err())
+        int i = 0;
+        while (i < length)
         {
-          continue;
-        }
+          auto *event = reinterpret_cast<struct inotify_event *>(&buffer[i]);
 
-        auto changes = snapshot::SnapshotDiff::compute(
-            current_snapshot_.all(),
-            next.value().all());
-
-        if (!changes.empty() && callback_)
-        {
-          events::EventBatch batch;
-
-          for (auto &c : changes)
+          if (event->len > 0)
           {
-            events::FileEvent event{
-                c.type,
-                c.current,
-                c.previous};
+            std::string full_path = root_.str() + "/" + event->name;
 
-            batch.add(std::move(event));
+            auto path_res = path::Path::from(full_path);
+            if (path_res.is_err())
+            {
+              i += sizeof(struct inotify_event) + event->len;
+              continue;
+            }
+
+            state::FileState current{path_res.value()};
+
+            types::FileEventType type;
+            bool valid = true;
+
+            if ((event->mask & IN_CREATE) || (event->mask & IN_MOVED_TO))
+            {
+              type = types::FileEventType::Created;
+            }
+            else if (event->mask & IN_MODIFY)
+            {
+              type = types::FileEventType::Updated;
+            }
+            else if ((event->mask & IN_DELETE) || (event->mask & IN_MOVED_FROM))
+            {
+              type = types::FileEventType::Deleted;
+            }
+            else
+            {
+              valid = false;
+            }
+
+            if (valid)
+            {
+              events::FileEvent ev{
+                  type,
+                  current,
+                  std::nullopt};
+
+              batch.add(std::move(ev));
+            }
           }
 
-          callback_(batch);
+          i += sizeof(struct inotify_event) + event->len;
         }
 
-        current_snapshot_ = std::move(next.value());
+        if (!batch.empty() && callback_)
+        {
+          callback_(batch);
+        }
       }
     }
 
   private:
     path::Path root_;
     Callback callback_;
-
-    snapshot::Snapshot current_snapshot_;
 
     int fd_{-1};
     int wd_{-1};
