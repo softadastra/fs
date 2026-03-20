@@ -23,13 +23,24 @@ target_compile_features(softadastra_fs PUBLIC cxx_std_20)
 # ========================
 # Dependencies
 # ========================
-if(NOT TARGET softadastra_core)
-    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../core build_core)
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.vix/vix_deps.cmake)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/.vix/vix_deps.cmake)
+endif()
+
+if(NOT TARGET softadastra::core)
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../core/CMakeLists.txt)
+        add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../core build_core)
+    else()
+        message(FATAL_ERROR
+            "softadastra::core not found. "
+            "Install dependencies with Vix or provide ../core in the monorepo."
+        )
+    endif()
 endif()
 
 target_link_libraries(softadastra_fs
     PUBLIC
-        softadastra_core
+        softadastra::core
 )
 
 # ========================
