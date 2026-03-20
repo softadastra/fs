@@ -142,17 +142,25 @@ Events can come from:
 ## Example Usage
 
 ```cpp id="ex7"
-#include <softadastra/fs/Watcher.hpp>
+#include <softadastra/fs/watcher/Watcher.hpp>
+#include <softadastra/fs/path/Path.hpp>
 
 using namespace softadastra::fs;
 
-Watcher watcher("~/SoftadastraDrive");
+int main()
+{
+  watcher::Watcher watcher;
 
-watcher.onEvent([](const FileEvent& event) {
-    // Forward to sync module
-});
+  auto path = path::Path::from("./data").value();
 
-watcher.start();
+  watcher.start(path, [](const events::EventBatch &batch)
+  {
+    // handle filesystem changes
+  });
+
+  std::this_thread::sleep_for(std::chrono::minutes(1));
+  watcher.stop();
+}
 ```
 
 ## Integration
