@@ -6,6 +6,8 @@ project(softadastra_fs
     LANGUAGES CXX
 )
 
+include(GNUInstallDirs)
+
 # ========================
 # Options
 # ========================
@@ -13,34 +15,92 @@ option(SOFTADASTRA_FS_BUILD_TESTS "Build fs tests" ON)
 option(SOFTADASTRA_FS_BUILD_EXAMPLES "Build fs examples" ON)
 
 # ========================
-# Library
+# Global settings
 # ========================
-add_library(softadastra_fs)
-
-# C++ standard
-target_compile_features(softadastra_fs PUBLIC cxx_std_20)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # ========================
 # Dependencies
 # ========================
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.vix/vix_deps.cmake)
-    include(${CMAKE_CURRENT_SOURCE_DIR}/.vix/vix_deps.cmake)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.vix/vix_deps.cmake")
+    include("${CMAKE_CURRENT_SOURCE_DIR}/.vix/vix_deps.cmake")
 endif()
 
-if(NOT TARGET softadastra::core)
-    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../core/CMakeLists.txt)
-        add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../core build_core)
-    else()
-        message(FATAL_ERROR
-            "softadastra::core not found. "
-            "Install dependencies with Vix or provide ../core in the monorepo."
-        )
-    endif()
+if(NOT TARGET softadastra::core AND NOT TARGET softadastra_core)
+    find_package(softadastra_core CONFIG QUIET)
+    find_package(core CONFIG QUIET)
 endif()
+
+set(SOFTADASTRA_FS_CORE_TARGET "")
+if(TARGET softadastra::core)
+    set(SOFTADASTRA_FS_CORE_TARGET softadastra::core)
+elseif(TARGET softadastra_core)
+    set(SOFTADASTRA_FS_CORE_TARGET softadastra_core)
+endif()
+
+if(SOFTADASTRA_FS_CORE_TARGET STREQUAL "")
+    message(FATAL_ERROR
+        "softadastra core target not found.\n"
+        "Install dependencies with Vix:\n"
+        "  vix add @softadastra/core\n"
+        "  vix install"
+    )
+endif()
+
+# ========================
+# Sources (generic)
+# ========================
+file(GLOB_RECURSE SOFTADASTRA_FS_SOURCES
+    CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+)
+
+# ========================
+# Platform sources
+# ========================
+set(SOFTADASTRA_FS_PLATFORM_SOURCES)
+
+if(UNIX AND NOT APPLE)
+    file(GLOB_RECURSE SOFTADASTRA_FS_LINUX_SOURCES
+        CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/platform/linux/*.cpp"
+    )
+    list(APPEND SOFTADASTRA_FS_PLATFORM_SOURCES ${SOFTADASTRA_FS_LINUX_SOURCES})
+endif()
+
+if(APPLE)
+    file(GLOB_RECURSE SOFTADASTRA_FS_MAC_SOURCES
+        CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/platform/mac/*.cpp"
+    )
+    list(APPEND SOFTADASTRA_FS_PLATFORM_SOURCES ${SOFTADASTRA_FS_MAC_SOURCES})
+endif()
+
+if(WIN32)
+    file(GLOB_RECURSE SOFTADASTRA_FS_WINDOWS_SOURCES
+        CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/platform/windows/*.cpp"
+    )
+    list(APPEND SOFTADASTRA_FS_PLATFORM_SOURCES ${SOFTADASTRA_FS_WINDOWS_SOURCES})
+endif()
+
+# ========================
+# Library
+# ========================
+add_library(softadastra_fs
+    ${SOFTADASTRA_FS_SOURCES}
+    ${SOFTADASTRA_FS_PLATFORM_SOURCES}
+)
+
+add_library(softadastra::fs ALIAS softadastra_fs)
+
+target_compile_features(softadastra_fs PUBLIC cxx_std_20)
 
 target_link_libraries(softadastra_fs
     PUBLIC
-        softadastra::core
+        ${SOFTADASTRA_FS_CORE_TARGET}
 )
 
 # ========================
@@ -49,53 +109,7 @@ target_link_libraries(softadastra_fs
 target_include_directories(softadastra_fs
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:include>
-)
-
-# ========================
-# Sources (generic)
-# ========================
-file(GLOB_RECURSE FS_SOURCES
-    CONFIGURE_DEPENDS
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
-)
-
-# ========================
-# Platform sources
-# ========================
-set(PLATFORM_SOURCES)
-
-if(UNIX AND NOT APPLE)
-    file(GLOB_RECURSE LINUX_SOURCES
-        CONFIGURE_DEPENDS
-        ${CMAKE_CURRENT_SOURCE_DIR}/platform/linux/*.cpp
-    )
-    list(APPEND PLATFORM_SOURCES ${LINUX_SOURCES})
-endif()
-
-if(APPLE)
-    file(GLOB_RECURSE MAC_SOURCES
-        CONFIGURE_DEPENDS
-        ${CMAKE_CURRENT_SOURCE_DIR}/platform/mac/*.cpp
-    )
-    list(APPEND PLATFORM_SOURCES ${MAC_SOURCES})
-endif()
-
-if(WIN32)
-    file(GLOB_RECURSE WINDOWS_SOURCES
-        CONFIGURE_DEPENDS
-        ${CMAKE_CURRENT_SOURCE_DIR}/platform/windows/*.cpp
-    )
-    list(APPEND PLATFORM_SOURCES ${WINDOWS_SOURCES})
-endif()
-
-# ========================
-# Attach sources
-# ========================
-target_sources(softadastra_fs
-    PRIVATE
-        ${FS_SOURCES}
-        ${PLATFORM_SOURCES}
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 # ========================
@@ -108,23 +122,25 @@ else()
 endif()
 
 # ========================
-# Linux specific (inotify)
+# Platform definitions
 # ========================
 if(UNIX AND NOT APPLE)
     target_compile_definitions(softadastra_fs PRIVATE SOFTADASTRA_FS_LINUX)
+elseif(APPLE)
+    target_compile_definitions(softadastra_fs PRIVATE SOFTADASTRA_FS_MAC)
+elseif(WIN32)
+    target_compile_definitions(softadastra_fs PRIVATE SOFTADASTRA_FS_WINDOWS)
 endif()
 
 # ========================
-# Position Independent Code
+# Target properties
 # ========================
 set_target_properties(softadastra_fs PROPERTIES
-    POSITION_INDEPENDENT_CODE ON
+    OUTPUT_NAME softadastra_fs
+    VERSION ${PROJECT_VERSION}
+    SOVERSION 0
+    EXPORT_NAME fs
 )
-
-# ========================
-# Namespacing
-# ========================
-add_library(softadastra::fs ALIAS softadastra_fs)
 
 # ========================
 # Examples
@@ -140,3 +156,15 @@ if(SOFTADASTRA_FS_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()
+
+# ========================
+# Summary
+# ========================
+message(STATUS "------------------------------------------------------")
+message(STATUS "softadastra::fs configured (${PROJECT_VERSION})")
+message(STATUS "Core target:     ${SOFTADASTRA_FS_CORE_TARGET}")
+message(STATUS "Include dir:     ${CMAKE_CURRENT_SOURCE_DIR}/include")
+message(STATUS "Build tests:     ${SOFTADASTRA_FS_BUILD_TESTS}")
+message(STATUS "Build examples:  ${SOFTADASTRA_FS_BUILD_EXAMPLES}")
+message(STATUS "Build type:      ${CMAKE_BUILD_TYPE}")
+message(STATUS "------------------------------------------------------")
