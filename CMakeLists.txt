@@ -11,8 +11,8 @@ include(GNUInstallDirs)
 # ========================
 # Options
 # ========================
-option(SOFTADASTRA_FS_BUILD_TESTS "Build fs tests" ON)
-option(SOFTADASTRA_FS_BUILD_EXAMPLES "Build fs examples" ON)
+option(SOFTADASTRA_FS_BUILD_TESTS "Build fs tests" OFF)
+option(SOFTADASTRA_FS_BUILD_EXAMPLES "Build fs examples" OFF)
 
 # ========================
 # Global settings
@@ -24,8 +24,10 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # ========================
 # Dependencies
 # ========================
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.vix/vix_deps.cmake")
-    include("${CMAKE_CURRENT_SOURCE_DIR}/.vix/vix_deps.cmake")
+if(NOT SOFTADASTRA_UMBRELLA_BUILD)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.vix/vix_deps.cmake")
+        include("${CMAKE_CURRENT_SOURCE_DIR}/.vix/vix_deps.cmake")
+    endif()
 endif()
 
 if(NOT TARGET softadastra::core AND NOT TARGET softadastra_core)
@@ -145,16 +147,24 @@ set_target_properties(softadastra_fs PROPERTIES
 # ========================
 # Examples
 # ========================
-if(SOFTADASTRA_FS_BUILD_EXAMPLES)
-    add_subdirectory(examples)
+if(SOFTADASTRA_FS_BUILD_EXAMPLES AND NOT SOFTADASTRA_UMBRELLA_BUILD)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/CMakeLists.txt")
+        add_subdirectory(examples)
+    else()
+        message(STATUS "[fs] examples/ missing CMakeLists.txt -> skipping")
+    endif()
 endif()
 
 # ========================
 # Tests
 # ========================
 if(SOFTADASTRA_FS_BUILD_TESTS)
-    enable_testing()
-    add_subdirectory(tests)
+    include(CTest)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt")
+        add_subdirectory(tests)
+    else()
+        message(STATUS "[fs] tests/ missing CMakeLists.txt -> skipping")
+    endif()
 endif()
 
 # ========================
