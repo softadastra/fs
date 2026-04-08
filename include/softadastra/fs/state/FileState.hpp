@@ -21,8 +21,8 @@ namespace softadastra::fs::state
   struct FileState
   {
     path::Path path;
-    FileMetadata metadata;
-    std::optional<hash::Hash> content_hash;
+    FileMetadata metadata{};
+    std::optional<hash::Hash> content_hash{std::nullopt};
 
     bool is_directory() const noexcept
     {

@@ -10,6 +10,7 @@
 #include <atomic>
 #include <vector>
 #include <cstring>
+#include <optional>
 
 #include <softadastra/fs/watcher/IWatcherBackend.hpp>
 #include <softadastra/fs/events/EventBatch.hpp>
