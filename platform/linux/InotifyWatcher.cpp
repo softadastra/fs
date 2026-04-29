@@ -2,27 +2,31 @@
  * InotifyWatcher.cpp
  */
 
-#include <unistd.h>
 #include <sys/inotify.h>
-#include <limits.h>
+#include <unistd.h>
 
-#include <thread>
 #include <atomic>
-#include <vector>
-#include <cstring>
+#include <chrono>
 #include <optional>
+#include <string>
+#include <thread>
+#include <vector>
 
-#include <softadastra/fs/watcher/IWatcherBackend.hpp>
+#include <softadastra/core/Core.hpp>
 #include <softadastra/fs/events/EventBatch.hpp>
 #include <softadastra/fs/events/FileEvent.hpp>
+#include <softadastra/fs/path/Path.hpp>
+#include <softadastra/fs/state/FileState.hpp>
 #include <softadastra/fs/types/FileEventType.hpp>
+#include <softadastra/fs/watcher/IWatcherBackend.hpp>
 
 namespace softadastra::fs::watcher
 {
   namespace events = softadastra::fs::events;
+  namespace path = softadastra::fs::path;
+  namespace state = softadastra::fs::state;
   namespace types = softadastra::fs::types;
-  namespace result = softadastra::core::types;
-  namespace errors = softadastra::core::errors;
+  namespace core_errors = softadastra::core::errors;
 
   class InotifyWatcher : public IWatcherBackend
   {
@@ -32,19 +36,19 @@ namespace softadastra::fs::watcher
 
     InotifyWatcher() = default;
 
-    ~InotifyWatcher()
+    ~InotifyWatcher() override
     {
       stop();
     }
 
-    Result start(const path::Path &root, Callback callback) override
+    [[nodiscard]] Result start(const path::Path &root, Callback callback) override
     {
       if (running_)
       {
-        return Result::err(errors::Error(
-            errors::ErrorCode::InvalidState,
-            errors::Severity::Error,
-            "Watcher already running"));
+        return Result::err(
+            core_errors::Error::make(
+                core_errors::ErrorCode::InvalidState,
+                "watcher already running"));
       }
 
       root_ = root;
@@ -53,26 +57,31 @@ namespace softadastra::fs::watcher
       fd_ = inotify_init1(IN_NONBLOCK);
       if (fd_ < 0)
       {
-        return Result::err(errors::Error(
-            errors::ErrorCode::InternalError,
-            errors::Severity::Error,
-            "Failed to init inotify"));
+        return Result::err(
+            core_errors::Error::make(
+                core_errors::ErrorCode::InternalError,
+                "failed to initialize inotify"));
       }
 
-      wd_ = inotify_add_watch(fd_, root_.str().c_str(),
-                              IN_CREATE | IN_MODIFY | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO);
+      wd_ = inotify_add_watch(
+          fd_,
+          root_.str().c_str(),
+          IN_CREATE | IN_MODIFY | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO);
 
       if (wd_ < 0)
       {
-        close(fd_);
-        return Result::err(errors::Error(
-            errors::ErrorCode::InternalError,
-            errors::Severity::Error,
-            "Failed to add watch"));
+        close_fd();
+
+        return Result::err(
+            core_errors::Error::make(
+                core_errors::ErrorCode::InternalError,
+                "failed to add inotify watch",
+                core_errors::ErrorContext(root_.str())));
       }
 
       running_ = true;
-      worker_ = std::thread([this]()
+
+      worker_ = std::thread([this]
                             { loop(); });
 
       return Result::ok();
@@ -81,7 +90,9 @@ namespace softadastra::fs::watcher
     void stop() override
     {
       if (!running_)
+      {
         return;
+      }
 
       running_ = false;
 
@@ -90,18 +101,11 @@ namespace softadastra::fs::watcher
         worker_.join();
       }
 
-      if (wd_ >= 0)
-      {
-        inotify_rm_watch(fd_, wd_);
-      }
-
-      if (fd_ >= 0)
-      {
-        close(fd_);
-      }
+      close_watch();
+      close_fd();
     }
 
-    bool is_running() const noexcept override
+    [[nodiscard]] bool is_running() const noexcept override
     {
       return running_;
     }
@@ -113,7 +117,7 @@ namespace softadastra::fs::watcher
 
       while (running_)
       {
-        int length = read(fd_, buffer.data(), buffer.size());
+        const auto length = ::read(fd_, buffer.data(), buffer.size());
 
         if (length <= 0)
         {
@@ -123,56 +127,16 @@ namespace softadastra::fs::watcher
 
         events::EventBatch batch;
 
-        int i = 0;
-        while (i < length)
+        std::size_t offset = 0;
+
+        while (offset < static_cast<std::size_t>(length))
         {
-          auto *event = reinterpret_cast<struct inotify_event *>(&buffer[i]);
+          const auto *event =
+              reinterpret_cast<const inotify_event *>(buffer.data() + offset);
 
-          if (event->len > 0)
-          {
-            std::string full_path = root_.str() + "/" + event->name;
+          handle_event(*event, batch);
 
-            auto path_res = path::Path::from(full_path);
-            if (path_res.is_err())
-            {
-              i += sizeof(struct inotify_event) + event->len;
-              continue;
-            }
-
-            state::FileState current{path_res.value()};
-
-            types::FileEventType type;
-            bool valid = true;
-
-            if ((event->mask & IN_CREATE) || (event->mask & IN_MOVED_TO))
-            {
-              type = types::FileEventType::Created;
-            }
-            else if (event->mask & IN_MODIFY)
-            {
-              type = types::FileEventType::Updated;
-            }
-            else if ((event->mask & IN_DELETE) || (event->mask & IN_MOVED_FROM))
-            {
-              type = types::FileEventType::Deleted;
-            }
-            else
-            {
-              valid = false;
-            }
-
-            if (valid)
-            {
-              events::FileEvent ev{
-                  type,
-                  current,
-                  std::nullopt};
-
-              batch.add(std::move(ev));
-            }
-          }
-
-          i += sizeof(struct inotify_event) + event->len;
+          offset += sizeof(inotify_event) + event->len;
         }
 
         if (!batch.empty() && callback_)
@@ -182,14 +146,85 @@ namespace softadastra::fs::watcher
       }
     }
 
+    void handle_event(const inotify_event &event, events::EventBatch &batch)
+    {
+      if (event.len == 0)
+      {
+        return;
+      }
+
+      auto type = event_type(event.mask);
+
+      if (!type.has_value())
+      {
+        return;
+      }
+
+      const std::string full_path = root_.str() + "/" + event.name;
+
+      auto path_result = path::Path::from(full_path);
+
+      if (path_result.is_err())
+      {
+        return;
+      }
+
+      state::FileState current{};
+      current.path = path_result.value();
+
+      batch.add(events::FileEvent{
+          *type,
+          current,
+          std::nullopt});
+    }
+
+    [[nodiscard]] static std::optional<types::FileEventType>
+    event_type(std::uint32_t mask) noexcept
+    {
+      if ((mask & IN_CREATE) || (mask & IN_MOVED_TO))
+      {
+        return types::FileEventType::Created;
+      }
+
+      if (mask & IN_MODIFY)
+      {
+        return types::FileEventType::Updated;
+      }
+
+      if ((mask & IN_DELETE) || (mask & IN_MOVED_FROM))
+      {
+        return types::FileEventType::Deleted;
+      }
+
+      return std::nullopt;
+    }
+
+    void close_watch() noexcept
+    {
+      if (wd_ >= 0 && fd_ >= 0)
+      {
+        inotify_rm_watch(fd_, wd_);
+        wd_ = -1;
+      }
+    }
+
+    void close_fd() noexcept
+    {
+      if (fd_ >= 0)
+      {
+        close(fd_);
+        fd_ = -1;
+      }
+    }
+
   private:
-    path::Path root_;
-    Callback callback_;
+    path::Path root_{};
+    Callback callback_{};
 
     int fd_{-1};
     int wd_{-1};
 
-    std::thread worker_;
+    std::thread worker_{};
     std::atomic<bool> running_{false};
   };
 

@@ -1,51 +1,76 @@
-/*
- * SnapshotDiff.hpp
+/**
+ *
+ *  @file SnapshotDiff.hpp
+ *  @author Gaspard Kirira
+ *
+ *  Copyright 2026, Softadastra.
+ *
+ *  Licensed under the Apache License, Version 2.0.
+ *
+ *  Softadastra FS
+ *
  */
 
 #ifndef SOFTADASTRA_FS_SNAPSHOT_DIFF_HPP
 #define SOFTADASTRA_FS_SNAPSHOT_DIFF_HPP
 
-#include <vector>
+#include <string>
 #include <unordered_map>
-#include <optional>
+#include <vector>
 
+#include <softadastra/fs/events/FileEvent.hpp>
 #include <softadastra/fs/state/FileState.hpp>
 #include <softadastra/fs/types/FileEventType.hpp>
 
 namespace softadastra::fs::snapshot
 {
+  namespace events = softadastra::fs::events;
   namespace state = softadastra::fs::state;
   namespace types = softadastra::fs::types;
 
-  struct FileChange
-  {
-    types::FileEventType type;
-    state::FileState current;
-    std::optional<state::FileState> previous;
-  };
-
+  /**
+   * @brief Computes filesystem changes between two snapshots.
+   *
+   * SnapshotDiff compares an old filesystem state with a new one and
+   * produces a list of FileEvent objects.
+   *
+   * It detects:
+   * - created files
+   * - updated files
+   * - deleted files
+   */
   class SnapshotDiff
   {
   public:
+    /**
+     * @brief Snapshot map type.
+     *
+     * Key = normalized path string.
+     */
     using Map = std::unordered_map<std::string, state::FileState>;
 
-    static std::vector<FileChange> compute(const Map &old_snapshot,
-                                           const Map &new_snapshot)
+    /**
+     * @brief Computes the list of changes between two snapshots.
+     *
+     * @param old_snapshot Previous snapshot.
+     * @param new_snapshot Current snapshot.
+     * @return Detected file events.
+     */
+    [[nodiscard]] static std::vector<events::FileEvent>
+    compute(const Map &old_snapshot, const Map &new_snapshot)
     {
-      std::vector<FileChange> changes;
+      std::vector<events::FileEvent> changes;
 
-      // ========================
-      // Created + Updated
-      // ========================
       for (const auto &[path, current] : new_snapshot)
       {
-        auto it = old_snapshot.find(path);
+        const auto it = old_snapshot.find(path);
 
         if (it == old_snapshot.end())
         {
-          changes.push_back({types::FileEventType::Created,
-                             current,
-                             std::nullopt});
+          changes.push_back(events::FileEvent{
+              types::FileEventType::Created,
+              current,
+              std::nullopt});
         }
         else
         {
@@ -53,23 +78,22 @@ namespace softadastra::fs::snapshot
 
           if (has_changed(previous, current))
           {
-            changes.push_back({types::FileEventType::Updated,
-                               current,
-                               previous});
+            changes.push_back(events::FileEvent{
+                types::FileEventType::Updated,
+                current,
+                previous});
           }
         }
       }
 
-      // ========================
-      // Deleted
-      // ========================
       for (const auto &[path, previous] : old_snapshot)
       {
         if (new_snapshot.find(path) == new_snapshot.end())
         {
-          changes.push_back({types::FileEventType::Deleted,
-                             previous,
-                             previous});
+          changes.push_back(events::FileEvent{
+              types::FileEventType::Deleted,
+              previous,
+              previous});
         }
       }
 
@@ -77,26 +101,36 @@ namespace softadastra::fs::snapshot
     }
 
   private:
-    static bool has_changed(const state::FileState &a,
-                            const state::FileState &b)
+    /**
+     * @brief Returns true if two file states differ.
+     */
+    [[nodiscard]] static bool has_changed(
+        const state::FileState &a,
+        const state::FileState &b)
     {
-      // Type change
       if (a.metadata.type != b.metadata.type)
+      {
         return true;
+      }
 
-      // Size change
       if (a.metadata.size != b.metadata.size)
+      {
         return true;
+      }
 
-      // Timestamp change
       if (a.metadata.modified != b.metadata.modified)
+      {
         return true;
+      }
 
-      // Hash change (if both exist)
       if (a.content_hash && b.content_hash)
       {
-        if (*a.content_hash != *b.content_hash)
-          return true;
+        return *a.content_hash != *b.content_hash;
+      }
+
+      if (a.content_hash.has_value() != b.content_hash.has_value())
+      {
+        return true;
       }
 
       return false;
@@ -105,4 +139,4 @@ namespace softadastra::fs::snapshot
 
 } // namespace softadastra::fs::snapshot
 
-#endif
+#endif // SOFTADASTRA_FS_SNAPSHOT_DIFF_HPP

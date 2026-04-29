@@ -1,28 +1,48 @@
-/*
- * PollingWatcher.hpp
+/**
+ *
+ *  @file PollingWatcher.hpp
+ *  @author Gaspard Kirira
+ *
+ *  Copyright 2026, Softadastra.
+ *
+ *  Licensed under the Apache License, Version 2.0.
+ *
+ *  Softadastra FS
+ *
  */
 
 #ifndef SOFTADASTRA_FS_POLLING_WATCHER_HPP
 #define SOFTADASTRA_FS_POLLING_WATCHER_HPP
 
-#include <thread>
 #include <atomic>
 #include <chrono>
+#include <thread>
+#include <utility>
 
-#include <softadastra/fs/watcher/IWatcherBackend.hpp>
+#include <softadastra/core/Core.hpp>
+
+#include <softadastra/fs/events/EventBatch.hpp>
 #include <softadastra/fs/snapshot/Snapshot.hpp>
 #include <softadastra/fs/snapshot/SnapshotBuilder.hpp>
 #include <softadastra/fs/snapshot/SnapshotDiff.hpp>
-#include <softadastra/fs/events/EventBatch.hpp>
+#include <softadastra/fs/watcher/IWatcherBackend.hpp>
 
 namespace softadastra::fs::watcher
 {
   namespace path = softadastra::fs::path;
   namespace snapshot = softadastra::fs::snapshot;
   namespace events = softadastra::fs::events;
-  namespace result = softadastra::core::types;
-  namespace errors = softadastra::core::errors;
+  namespace core_errors = softadastra::core::errors;
 
+  /**
+   * @brief Polling-based filesystem watcher.
+   *
+   * PollingWatcher periodically rebuilds a snapshot and computes the diff
+   * against the previous snapshot.
+   *
+   * It is portable and deterministic, but less efficient than native OS
+   * backends such as inotify, FSEvents, or ReadDirectoryChangesW.
+   */
   class PollingWatcher : public IWatcherBackend
   {
   public:
@@ -31,44 +51,55 @@ namespace softadastra::fs::watcher
 
     PollingWatcher() = default;
 
-    ~PollingWatcher()
+    /**
+     * @brief Stops the worker thread on destruction.
+     */
+    ~PollingWatcher() override
     {
       stop();
     }
 
-    Result start(const path::Path &root, Callback callback) override
+    /**
+     * @brief Starts polling a root path.
+     */
+    [[nodiscard]] Result start(const path::Path &root, Callback callback) override
     {
       if (running_)
       {
-        return Result::err(errors::Error(
-            errors::ErrorCode::InvalidState,
-            errors::Severity::Error,
-            "Watcher already running"));
+        return Result::err(
+            core_errors::Error::make(
+                core_errors::ErrorCode::InvalidState,
+                "watcher already running"));
       }
 
       root_ = root;
       callback_ = std::move(callback);
 
       auto initial = snapshot::SnapshotBuilder::build(root_);
+
       if (initial.is_err())
       {
         return Result::err(initial.error());
       }
 
       current_snapshot_ = std::move(initial.value());
-
       running_ = true;
 
-      worker_ = std::thread([this]()
+      worker_ = std::thread([this]
                             { loop(); });
 
       return Result::ok();
     }
 
+    /**
+     * @brief Stops polling.
+     */
     void stop() override
     {
       if (!running_)
+      {
         return;
+      }
 
       running_ = false;
 
@@ -78,21 +109,26 @@ namespace softadastra::fs::watcher
       }
     }
 
-    bool is_running() const noexcept override
+    /**
+     * @brief Returns true if the watcher is running.
+     */
+    [[nodiscard]] bool is_running() const noexcept override
     {
       return running_;
     }
 
   private:
+    /**
+     * @brief Main polling loop.
+     */
     void loop()
     {
-      using namespace std::chrono_literals;
-
       while (running_)
       {
         std::this_thread::sleep_for(interval_);
 
         auto next = snapshot::SnapshotBuilder::build(root_);
+
         if (next.is_err())
         {
           continue;
@@ -106,13 +142,8 @@ namespace softadastra::fs::watcher
         {
           events::EventBatch batch;
 
-          for (auto &c : changes)
+          for (auto &event : changes)
           {
-            events::FileEvent event{
-                c.type,
-                c.current,
-                c.previous};
-
             batch.add(std::move(event));
           }
 
@@ -124,12 +155,12 @@ namespace softadastra::fs::watcher
     }
 
   private:
-    path::Path root_;
-    Callback callback_;
+    path::Path root_{};
+    Callback callback_{};
 
-    snapshot::Snapshot current_snapshot_;
+    snapshot::Snapshot current_snapshot_{};
 
-    std::thread worker_;
+    std::thread worker_{};
     std::atomic<bool> running_{false};
 
     std::chrono::milliseconds interval_{100};
@@ -137,4 +168,4 @@ namespace softadastra::fs::watcher
 
 } // namespace softadastra::fs::watcher
 
-#endif
+#endif // SOFTADASTRA_FS_POLLING_WATCHER_HPP

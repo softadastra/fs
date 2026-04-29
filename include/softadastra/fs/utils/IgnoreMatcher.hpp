@@ -1,15 +1,38 @@
-/*
- * IgnoreMatcher.hpp
+/**
+ *
+ *  @file IgnoreMatcher.hpp
+ *  @author Gaspard Kirira
+ *
+ *  Copyright 2026, Softadastra.
+ *
+ *  Licensed under the Apache License, Version 2.0.
+ *
+ *  Softadastra FS
+ *
  */
 
 #ifndef SOFTADASTRA_FS_UTILS_IGNORE_MATCHER_HPP
 #define SOFTADASTRA_FS_UTILS_IGNORE_MATCHER_HPP
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace softadastra::fs::utils
 {
+
+  /**
+   * @brief Matches file paths against ignore patterns.
+   *
+   * Supports simple wildcard patterns:
+   * - '*' matches any sequence
+   * - '?' matches a single character
+   *
+   * Example:
+   *   "*.log"
+   *   "build/*"
+   *   "temp?.txt"
+   */
   class IgnoreMatcher
   {
   public:
@@ -20,12 +43,18 @@ namespace softadastra::fs::utils
     {
     }
 
+    /**
+     * @brief Adds a new ignore pattern.
+     */
     void add(std::string pattern)
     {
       patterns_.emplace_back(std::move(pattern));
     }
 
-    bool matches(const std::string &path) const
+    /**
+     * @brief Returns true if path matches any ignore pattern.
+     */
+    [[nodiscard]] bool matches(std::string_view path) const
     {
       for (const auto &pattern : patterns_)
       {
@@ -38,23 +67,28 @@ namespace softadastra::fs::utils
     }
 
   private:
-    static bool match_pattern(const std::string &pattern,
-                              const std::string &path)
+    static bool match_pattern(std::string_view pattern,
+                              std::string_view path)
     {
       return match_wildcard(pattern, path, 0, 0);
     }
 
-    // simple wildcard matcher: '*' and '?'
-    static bool match_wildcard(const std::string &pattern,
-                               const std::string &str,
-                               size_t p,
-                               size_t s)
+    /**
+     * @brief Simple wildcard matcher.
+     *
+     * '*' → any sequence
+     * '?' → single character
+     */
+    static bool match_wildcard(std::string_view pattern,
+                               std::string_view str,
+                               std::size_t p,
+                               std::size_t s)
     {
       while (p < pattern.size() || s < str.size())
       {
         if (p < pattern.size() && pattern[p] == '*')
         {
-          // collapse multiple '*'
+          // collapse consecutive '*'
           while (p < pattern.size() && pattern[p] == '*')
             ++p;
 

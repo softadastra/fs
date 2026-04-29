@@ -110,6 +110,14 @@ target_link_libraries(softadastra_fs
         ${SOFTADASTRA_FS_CORE_TARGET}
 )
 
+# macOS only
+if(APPLE)
+    target_link_libraries(softadastra_fs
+        PRIVATE
+            "-framework CoreServices"
+    )
+endif()
+
 # ========================
 # Include directories
 # ========================

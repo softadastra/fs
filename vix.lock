@@ -1,12 +1,13 @@
 {
   "dependencies": [
     {
-      "commit": "3dadf4809e1712777090a6dfe4c79437f64ca72b",
-      "hash": "2b3777fbf4803b6cefd8066e525f27d0ffcd8d98079e003bdc1e89ee2de40776",
+      "commit": "2718ab3911fa0970887056cc35837508f63db10a",
+      "hash": "14a224a38472c3c040f2b076c3b865fa222704e3a059e0735ab515f896149b9d",
       "id": "softadastra/core",
       "repo": "https://github.com/softadastra/core",
-      "tag": "v1.6.0",
-      "version": "1.6.0"
+      "requested": "1.7.0",
+      "tag": "v1.7.0",
+      "version": "1.7.0"
     }
   ],
   "lockVersion": 1

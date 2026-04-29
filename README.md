@@ -1,231 +1,232 @@
 # softadastra/fs
 
-> Filesystem observation layer for local-first systems.
+> Filesystem observation and synchronization primitives.
 
-The `fs` module is responsible for **observing and describing changes in the local filesystem**.
+The `fs` module provides a **portable, deterministic filesystem layer** for Softadastra.
 
-It is the **entry point of all local data changes** in Softadastra systems.
+It enables:
+
+- Scanning directories
+- Building snapshots
+- Detecting changes (diff)
+- Watching filesystem events in real time
 
 ## Purpose
 
 The goal of `softadastra/fs` is simple:
 
-> Detect changes in a directory and emit structured, reliable events.
+> Observe the filesystem and produce deterministic change events.
+
+It is the foundation for:
+
+- sync engine
+- WAL operations
+- metadata updates
+- real-time applications
 
 ## Core Principle
 
-> Observe everything. Decide nothing.
+> *The filesystem is a stream of events.*
 
-This module:
+Instead of reacting directly to OS events, Softadastra:
 
-* Detects changes
-* Describes state
-* Emits events
-
-It does **not** decide what to do with them.
+1. Builds a snapshot
+2. Computes a diff
+3. Produces structured events
 
 ## Responsibilities
 
 The `fs` module provides:
 
-* Directory watching
-* Initial filesystem scanning
-* File state representation
-* Snapshot creation
-* Snapshot comparison (diff)
-* Path utilities
+- Path abstraction (`Path`)
+- Snapshot system (`Snapshot`)
+- Change detection (`SnapshotDiff`)
+- Scanner (`Scanner`)
+- Watchers (Polling, inotify, FSEvents, Windows)
+- Event system (`FileEvent`, `EventBatch`)
+- File state modeling (`FileState`, `FileMetadata`)
 
 ## What this module does NOT do
 
-* No sync logic (sync module)
-* No durability (wal module)
-* No network communication (transport module)
-* No state ownership (metadata module)
+- No sync logic
+- No storage logic
+- No network logic
+- No conflict resolution
 
-👉 It is a pure observation layer.
+> 👉 It observes. It does not decide.
 
 ## Design Principles
 
-### 1. Passive
+### 1. Determinism
 
-The module observes changes but never triggers business logic.
+Same input → same output, across machines, OS, and time.
 
-### 2. Deterministic
+### 2. Normalized paths
 
-Given the same filesystem state, it must produce the same results.
+All paths are normalized, canonical, and comparable.
 
-### 3. Reliable
+### 3. Strong typing
 
-* Duplicate events are acceptable
-* Missing events are not
+No raw strings — only `Path`, `FileState`, `FileEvent`.
 
-### 4. Decoupled
+### 4. Portable abstraction
 
-No dependency on higher-level modules.
+| Platform | Backend |
+|----------|---------|
+| Linux | inotify |
+| macOS | FSEvents |
+| Windows | ReadDirectoryChangesW |
+| fallback | polling |
 
 ## Module Structure
 
-```id="fs9x21"
+```
 modules/fs/
 ├── include/softadastra/fs/
-│   ├── Watcher.hpp
-│   ├── Scanner.hpp
-│   ├── PathUtils.hpp
-│   ├── FileState.hpp
-│   └── Snapshot.hpp
-└── src/
+│   ├── events/
+│   ├── path/
+│   ├── scanner/
+│   ├── snapshot/
+│   ├── state/
+│   ├── types/
+│   ├── utils/
+│   └── watcher/
+├── platform/
+│   ├── linux/
+│   ├── mac/
+│   └── windows/
 ```
 
 ## Core Components
 
-### Watcher
+### Path
 
-Monitors a directory in real time.
+Strong, normalized filesystem paths:
 
-Detects:
-
-* File creation
-* File modification
-* File deletion
-
-### Scanner
-
-Performs an initial scan of a directory.
-
-Used for:
-
-* Bootstrapping state
-* Rebuilding snapshots
-
-### FileState
-
-Represents a file at a given moment.
-
-Includes:
-
-* Path
-* Size
-* Last modified time
-* Optional hash
+```cpp
+auto p = Path::from("a/./b/../c").value();
+// -> "a/c"
+```
 
 ### Snapshot
 
-Represents the full state of a directory.
+Represents filesystem state:
 
-Used to:
+```cpp
+auto snap = SnapshotBuilder::build(root).value();
+```
 
-* Compare states
-* Detect differences
-* Feed the sync engine
+### Diff
 
-### PathUtils
+Detects changes between snapshots:
 
-Utility helpers for:
+```cpp
+auto events = SnapshotDiff::compute(a.all(), b.all());
+```
 
-* Path normalization
-* Relative / absolute resolution
-* Cross-platform handling
+### Scanner
 
-## Event Model
+Simple API to build snapshots:
 
-The module emits events such as:
+```cpp
+auto snap = Scanner::scan(root);
+```
 
-* `FileCreated`
-* `FileUpdated`
-* `FileDeleted`
+### Watcher
 
-Events can come from:
+Real-time filesystem monitoring:
 
-* Real-time watcher
-* Snapshot diff
+```cpp
+Watcher watcher;
 
-## Example Usage
+watcher.start(root, [](const EventBatch& batch) {
+    for (const auto& e : batch.all()) {
+        // handle event
+    }
+});
+```
 
-```cpp id="ex7"
-#include <softadastra/fs/watcher/Watcher.hpp>
-#include <softadastra/fs/path/Path.hpp>
+### Event Model
+
+```cpp
+FileEvent {
+    type:     Created | Updated | Deleted
+    current:  FileState
+    previous: optional<FileState>
+}
+```
+
+## Example
+
+```cpp
+#include <softadastra/fs/Fs.hpp>
 
 using namespace softadastra::fs;
 
 int main()
 {
-  watcher::Watcher watcher;
+    auto root = path::Path::from("./data").value();
 
-  auto path = path::Path::from("./data").value();
+    auto snap = scanner::Scanner::scan(root).value();
 
-  watcher.start(path, [](const events::EventBatch &batch)
-  {
-    // handle filesystem changes
-  });
-
-  std::this_thread::sleep_for(std::chrono::minutes(1));
-  watcher.stop();
+    for (const auto& [_, file] : snap.all())
+    {
+        std::cout << file.path.str() << "\n";
+    }
 }
 ```
+
+## Dependencies
+
+**Internal:** `softadastra/core`
+
+**External:**
+- C++20 standard library
+- OS APIs (inotify, FSEvents, WinAPI)
 
 ## Integration
 
 Used by:
 
-* sync (primary consumer)
-* metadata (indirectly via sync)
-
-## Reliability Strategy
-
-To guarantee correctness:
-
-* Watcher captures real-time events
-* Snapshot diff acts as a fallback
-* Event coalescing reduces noise
-
-## Dependencies
-
-### Internal
-
-* softadastra/core
-
-### External
-
-* OS filesystem APIs:
-
-  * Linux: inotify
-  * macOS: FSEvents (planned)
-  * Windows: ReadDirectoryChangesW (planned)
-
-## MVP Scope
-
-* Single directory watcher
-* Basic file events
-* Snapshot diff support
-* No advanced rename detection
-
-## Roadmap
-
-* Rename detection (true move tracking)
-* Ignore rules (.gitignore-style)
-* Incremental hashing
-* Large directory optimization
-* Smarter event batching
+- `wal`
+- `sync`
+- `store`
+- `metadata`
 
 ## Rules
 
-* Never trigger sync directly
-* Never store state permanently
-* Never assume event completeness
-* Always allow reconciliation via snapshot
+- No business logic
+- No sync decisions
+- No side effects
+- Deterministic output
+
+## When to modify this module
+
+Only if:
+
+- It improves filesystem observation
+- It remains deterministic
+- It does not introduce coupling
+
+## Roadmap
+
+- [ ] Metadata enrichment (hash, permissions)
+- [ ] Ignore file support (`.softadastraignore`)
+- [ ] Incremental scanning
+- [ ] Watcher backpressure handling
+- [ ] Async event pipeline
 
 ## Philosophy
 
-The `fs` module is the **eyes of the system**.
-
-> It observes everything, but decides nothing.
+> The filesystem is not state.
+> It is a sequence of changes.
 
 ## Summary
 
-* Detects filesystem changes
-* Emits structured events
-* Feeds the sync engine
-* Fully decoupled
+- Cross-platform filesystem layer
+- Snapshot + diff model
+- Real-time watchers
+- Deterministic and portable
 
 ## Installation
 
@@ -235,4 +236,4 @@ vix add @softadastra/fs
 
 ## License
 
-See root LICENSE file.
+Apache License 2.0

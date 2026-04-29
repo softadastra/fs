@@ -1,52 +1,74 @@
-/*
- * SnapshotBuilder.hpp
+/**
+ *
+ *  @file SnapshotBuilder.hpp
+ *  @author Gaspard Kirira
+ *
+ *  Copyright 2026, Softadastra.
+ *
+ *  Licensed under the Apache License, Version 2.0.
+ *
+ *  Softadastra FS
+ *
  */
 
 #ifndef SOFTADASTRA_FS_SNAPSHOT_BUILDER_HPP
 #define SOFTADASTRA_FS_SNAPSHOT_BUILDER_HPP
 
+#include <chrono>
+#include <exception>
 #include <filesystem>
+#include <optional>
 
-#include <softadastra/fs/snapshot/Snapshot.hpp>
-#include <softadastra/fs/state/FileState.hpp>
-#include <softadastra/fs/state/FileMetadata.hpp>
+#include <softadastra/core/Core.hpp>
+
 #include <softadastra/fs/path/Path.hpp>
+#include <softadastra/fs/snapshot/Snapshot.hpp>
+#include <softadastra/fs/state/FileMetadata.hpp>
+#include <softadastra/fs/state/FileState.hpp>
 #include <softadastra/fs/types/FileType.hpp>
-
-#include <softadastra/core/types/Result.hpp>
-#include <softadastra/core/errors/Error.hpp>
-#include <softadastra/core/errors/ErrorCode.hpp>
-#include <softadastra/core/errors/Severity.hpp>
-#include <softadastra/core/time/Timestamp.hpp>
 
 namespace softadastra::fs::snapshot
 {
   namespace fs = std::filesystem;
   namespace state = softadastra::fs::state;
   namespace path = softadastra::fs::path;
-  namespace result = softadastra::core::types;
-  namespace errors = softadastra::core::errors;
+  namespace core_types = softadastra::core::types;
+  namespace core_errors = softadastra::core::errors;
+  namespace core_time = softadastra::core::time;
   namespace fstypes = softadastra::fs::types;
 
+  /**
+   * @brief Builds filesystem snapshots from disk.
+   *
+   * SnapshotBuilder scans a root directory and produces a Snapshot containing
+   * FileState entries for each discovered filesystem item.
+   */
   class SnapshotBuilder
   {
   public:
-    using Result = result::Result<Snapshot, errors::Error>;
+    using Result = core_types::Result<Snapshot, core_errors::Error>;
 
-    static Result build(const path::Path &root)
+    /**
+     * @brief Builds a snapshot from a root path.
+     *
+     * @param root Root directory to scan.
+     * @return Snapshot on success, Error on failure.
+     */
+    [[nodiscard]] static Result build(const path::Path &root)
     {
       Snapshot snapshot;
 
       try
       {
-        fs::path root_path(root.str());
+        const fs::path root_path(root.str());
 
         if (!fs::exists(root_path))
         {
-          return Result::err(errors::Error(
-              errors::ErrorCode::NotFound,
-              errors::Severity::Error,
-              "Root path does not exist"));
+          return Result::err(
+              core_errors::Error::make(
+                  core_errors::ErrorCode::NotFound,
+                  "root path does not exist",
+                  core_errors::ErrorContext(root.str())));
         }
 
         for (const auto &entry : fs::recursive_directory_iterator(root_path))
@@ -65,29 +87,34 @@ namespace softadastra::fs::snapshot
       }
       catch (const std::exception &e)
       {
-        return Result::err(errors::Error(
-            errors::ErrorCode::FileReadError,
-            errors::Severity::Error,
-            e.what()));
+        return Result::err(
+            core_errors::Error::make(
+                core_errors::ErrorCode::FileReadError,
+                "failed to build snapshot",
+                core_errors::ErrorContext(e.what())));
       }
     }
 
   private:
-    static result::Result<state::FileState, errors::Error>
+    using FileStateResult =
+        core_types::Result<state::FileState, core_errors::Error>;
+
+    /**
+     * @brief Builds a FileState from a filesystem entry.
+     */
+    [[nodiscard]] static FileStateResult
     build_file(const fs::directory_entry &entry)
     {
       try
       {
-        auto path_str = entry.path().string();
+        auto path_result = path::Path::from(entry.path().string());
 
-        auto path_result = path::Path::from(path_str);
         if (path_result.is_err())
         {
-          return result::Result<state::FileState, errors::Error>::err(
-              path_result.error());
+          return FileStateResult::err(path_result.error());
         }
 
-        state::FileMetadata metadata;
+        state::FileMetadata metadata{};
 
         if (entry.is_regular_file())
         {
@@ -114,28 +141,35 @@ namespace softadastra::fs::snapshot
             metadata,
             std::nullopt};
 
-        return result::Result<state::FileState, errors::Error>::ok(std::move(file));
+        return FileStateResult::ok(std::move(file));
       }
       catch (const std::exception &e)
       {
-        return result::Result<state::FileState, errors::Error>::err(
-            errors::Error(
-                errors::ErrorCode::FileReadError,
-                errors::Severity::Error,
-                e.what()));
+        return FileStateResult::err(
+            core_errors::Error::make(
+                core_errors::ErrorCode::FileReadError,
+                "failed to read filesystem entry",
+                core_errors::ErrorContext(e.what())));
       }
     }
 
-    static softadastra::core::time::Timestamp
-    to_timestamp(const fs::file_time_type &time)
+    /**
+     * @brief Converts std::filesystem time to Softadastra timestamp.
+     */
+    [[nodiscard]] static core_time::Timestamp
+    to_timestamp(const fs::file_time_type &file_time)
     {
-      using namespace std::chrono;
+      const auto system_time =
+          std::chrono::clock_cast<std::chrono::system_clock>(file_time);
 
-      auto s = time_point_cast<seconds>(time).time_since_epoch().count();
-      return softadastra::core::time::Timestamp(s);
+      const auto millis =
+          std::chrono::duration_cast<std::chrono::milliseconds>(
+              system_time.time_since_epoch());
+
+      return core_time::Timestamp::from_millis(millis.count());
     }
   };
 
 } // namespace softadastra::fs::snapshot
 
-#endif
+#endif // SOFTADASTRA_FS_SNAPSHOT_BUILDER_HPP

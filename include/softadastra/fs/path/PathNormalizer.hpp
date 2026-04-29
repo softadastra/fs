@@ -1,5 +1,14 @@
-/*
- * PathNormalizer.hpp
+/**
+ *
+ *  @file PathNormalizer.hpp
+ *  @author Gaspard Kirira
+ *
+ *  Copyright 2026, Softadastra.
+ *
+ *  Licensed under the Apache License, Version 2.0.
+ *
+ *  Softadastra FS
+ *
  */
 
 #ifndef SOFTADASTRA_FS_PATH_NORMALIZER_HPP
@@ -12,16 +21,37 @@
 
 namespace softadastra::fs::path
 {
+  /**
+   * @brief Canonical path normalization.
+   *
+   * PathNormalizer resolves:
+   * - "." (current directory)
+   * - ".." (parent directory)
+   * - duplicate separators
+   *
+   * It produces a deterministic, canonical path representation.
+   *
+   * Examples:
+   *   "a/./b"        -> "a/b"
+   *   "a/b/../c"     -> "a/c"
+   *   "/a/../b"      -> "/b"
+   *   "../a/b"       -> "../a/b"
+   */
   class PathNormalizer
   {
   public:
-    static std::string normalize(std::string path)
+    /**
+     * @brief Normalizes a filesystem path.
+     */
+    [[nodiscard]] static std::string normalize(std::string path)
     {
+      // Step 1: basic normalization (slashes, duplicates)
       path = PathUtils::normalize(std::move(path));
 
       const bool absolute = PathUtils::is_absolute(path);
 
-      auto parts = PathUtils::split(path);
+      const auto parts = PathUtils::split(path);
+
       std::vector<std::string> stack;
       stack.reserve(parts.size());
 
@@ -38,12 +68,9 @@ namespace softadastra::fs::path
           {
             stack.pop_back();
           }
-          else
+          else if (!absolute)
           {
-            if (!absolute)
-            {
-              stack.push_back("..");
-            }
+            stack.push_back("..");
           }
         }
         else
@@ -62,6 +89,7 @@ namespace softadastra::fs::path
       for (std::size_t i = 0; i < stack.size(); ++i)
       {
         result += stack[i];
+
         if (i + 1 < stack.size())
         {
           result += '/';
@@ -79,4 +107,4 @@ namespace softadastra::fs::path
 
 } // namespace softadastra::fs::path
 
-#endif
+#endif // SOFTADASTRA_FS_PATH_NORMALIZER_HPP
