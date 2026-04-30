@@ -159,8 +159,15 @@ namespace softadastra::fs::snapshot
     [[nodiscard]] static core_time::Timestamp
     to_timestamp(const fs::file_time_type &file_time)
     {
+      const auto now_file =
+          fs::file_time_type::clock::now();
+
+      const auto now_system =
+          std::chrono::system_clock::now();
+
       const auto system_time =
-          std::chrono::clock_cast<std::chrono::system_clock>(file_time);
+          std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+              file_time - now_file + now_system);
 
       const auto millis =
           std::chrono::duration_cast<std::chrono::milliseconds>(

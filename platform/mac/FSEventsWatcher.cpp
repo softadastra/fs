@@ -25,10 +25,6 @@
 #include <softadastra/fs/watcher/InotifyWatcher.hpp>
 #endif
 
-#ifdef SOFTADASTRA_FS_MAC
-#include <softadastra/fs/watcher/FSEventsWatcher.hpp>
-#endif
-
 #ifdef SOFTADASTRA_FS_WINDOWS
 #include <softadastra/fs/watcher/WinWatcher.hpp>
 #endif
