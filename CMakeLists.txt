@@ -86,9 +86,19 @@ if(APPLE)
         CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/platform/mac/*.cpp"
     )
-    list(APPEND SOFTADASTRA_FS_PLATFORM_SOURCES ${SOFTADASTRA_FS_MAC_SOURCES})
-endif()
 
+    list(APPEND SOFTADASTRA_FS_PLATFORM_SOURCES
+        ${SOFTADASTRA_FS_MAC_SOURCES}
+    )
+
+    if(SOFTADASTRA_FS_MAC_SOURCES)
+        set_source_files_properties(
+            ${SOFTADASTRA_FS_MAC_SOURCES}
+            PROPERTIES
+                COMPILE_OPTIONS "-Wno-deprecated-declarations"
+        )
+    endif()
+endif()
 if(WIN32)
     file(GLOB_RECURSE SOFTADASTRA_FS_WINDOWS_SOURCES
         CONFIGURE_DEPENDS
