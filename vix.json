@@ -1,11 +1,18 @@
 {
-  "name": "fs",
-  "namespace": "softadastra",
-  "version": "1.11.1",
-  "type": "library",
+  "authors": [
+    {
+      "github": "Gaspardkirira",
+      "name": "Gaspard Kirira"
+    }
+  ],
+  "deps": [
+    {
+      "id": "softadastra/core",
+      "version": "1.8.0"
+    }
+  ],
+  "description": "Filesystem primitives for snapshots, diffs, file events, and reliable Softadastra sync.",
   "include": "include",
-  "license": "MIT",
-  "description": "Filesystem observation and change detection layer for Softadastra. Provides snapshotting, diffing, file events, and cross-platform watchers designed for reliable, offline-first synchronization systems.",
   "keywords": [
     "softadastra",
     "fs",
@@ -30,17 +37,10 @@
     "infrastructure",
     "library"
   ],
+  "license": "MIT",
+  "name": "fs",
+  "namespace": "softadastra",
   "repository": "https://github.com/softadastra/fs",
-  "authors": [
-    {
-      "name": "Gaspard Kirira",
-      "github": "Gaspardkirira"
-    }
-  ],
-  "deps": [
-    {
-      "id": "softadastra/core",
-      "version": "1.7.0"
-    }
-  ]
+  "type": "library",
+  "version": "1.12.0"
 }

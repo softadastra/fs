@@ -1,232 +1,83 @@
 # softadastra/fs
 
-> Filesystem observation and synchronization primitives.
+> Filesystem observation primitives for reliable Softadastra products.
 
-The `fs` module provides a **portable, deterministic filesystem layer** for Softadastra.
+`softadastra/fs` provides the filesystem layer of the Softadastra C++ stack.
 
-It enables:
-
-- Scanning directories
-- Building snapshots
-- Detecting changes (diff)
-- Watching filesystem events in real time
+Softadastra builds reliability-first products for local-first, offline-first, and distributed applications. This module turns filesystem state into deterministic snapshots and structured change events.
 
 ## Purpose
 
-The goal of `softadastra/fs` is simple:
+`softadastra/fs` exists to observe files safely and consistently.
 
-> Observe the filesystem and produce deterministic change events.
+It is used by higher-level modules such as WAL, Store, Sync, Metadata, SDKs, and product infrastructure.
 
-It is the foundation for:
+It is designed to be:
 
-- sync engine
-- WAL operations
-- metadata updates
-- real-time applications
+- Portable
+- Deterministic
+- Event-oriented
+- Snapshot-based
+- Product-ready
 
-## Core Principle
+## What it provides
 
-> *The filesystem is a stream of events.*
+This module provides filesystem primitives such as:
 
-Instead of reacting directly to OS events, Softadastra:
+- Path normalization
+- Directory scanning
+- Filesystem snapshots
+- Snapshot diffing
+- File state modeling
+- Structured file events
+- Filesystem watchers
+- Event batches
 
-1. Builds a snapshot
-2. Computes a diff
-3. Produces structured events
+## What it does not do
 
-## Responsibilities
+`softadastra/fs` does not contain:
 
-The `fs` module provides:
+- Sync decisions
+- Conflict resolution
+- Storage engines
+- Network transport
+- Product-specific logic
 
-- Path abstraction (`Path`)
-- Snapshot system (`Snapshot`)
-- Change detection (`SnapshotDiff`)
-- Scanner (`Scanner`)
-- Watchers (Polling, inotify, FSEvents, Windows)
-- Event system (`FileEvent`, `EventBatch`)
-- File state modeling (`FileState`, `FileMetadata`)
+It observes filesystem changes, but it does not decide how those changes should be synchronized or stored.
 
-## What this module does NOT do
+## Core model
 
-- No sync logic
-- No storage logic
-- No network logic
-- No conflict resolution
-
-> 👉 It observes. It does not decide.
-
-## Design Principles
-
-### 1. Determinism
-
-Same input → same output, across machines, OS, and time.
-
-### 2. Normalized paths
-
-All paths are normalized, canonical, and comparable.
-
-### 3. Strong typing
-
-No raw strings — only `Path`, `FileState`, `FileEvent`.
-
-### 4. Portable abstraction
-
-| Platform | Backend |
-|----------|---------|
-| Linux | inotify |
-| macOS | FSEvents |
-| Windows | ReadDirectoryChangesW |
-| fallback | polling |
-
-## Module Structure
-
-```
-modules/fs/
-├── include/softadastra/fs/
-│   ├── events/
-│   ├── path/
-│   ├── scanner/
-│   ├── snapshot/
-│   ├── state/
-│   ├── types/
-│   ├── utils/
-│   └── watcher/
-├── platform/
-│   ├── linux/
-│   ├── mac/
-│   └── windows/
+```txt
+Filesystem
+     |
+Scanner / Watcher
+     |
+Snapshot
+     |
+Diff
+     |
+File events
 ```
 
-## Core Components
+Softadastra treats the filesystem as a source of structured events.
 
-### Path
+Instead of trusting raw OS events directly, the module can scan, compare snapshots, and produce deterministic changes.
 
-Strong, normalized filesystem paths:
+## Where it fits
 
-```cpp
-auto p = Path::from("a/./b/../c").value();
-// -> "a/c"
+```txt
+Softadastra products
+        |
+SDKs and product APIs
+        |
+Sync, WAL, Store, Metadata
+        |
+softadastra/fs
+        |
+softadastra/core
 ```
 
-### Snapshot
-
-Represents filesystem state:
-
-```cpp
-auto snap = SnapshotBuilder::build(root).value();
-```
-
-### Diff
-
-Detects changes between snapshots:
-
-```cpp
-auto events = SnapshotDiff::compute(a.all(), b.all());
-```
-
-### Scanner
-
-Simple API to build snapshots:
-
-```cpp
-auto snap = Scanner::scan(root);
-```
-
-### Watcher
-
-Real-time filesystem monitoring:
-
-```cpp
-Watcher watcher;
-
-watcher.start(root, [](const EventBatch& batch) {
-    for (const auto& e : batch.all()) {
-        // handle event
-    }
-});
-```
-
-### Event Model
-
-```cpp
-FileEvent {
-    type:     Created | Updated | Deleted
-    current:  FileState
-    previous: optional<FileState>
-}
-```
-
-## Example
-
-```cpp
-#include <softadastra/fs/Fs.hpp>
-
-using namespace softadastra::fs;
-
-int main()
-{
-    auto root = path::Path::from("./data").value();
-
-    auto snap = scanner::Scanner::scan(root).value();
-
-    for (const auto& [_, file] : snap.all())
-    {
-        std::cout << file.path.str() << "\n";
-    }
-}
-```
-
-## Dependencies
-
-**Internal:** `softadastra/core`
-
-**External:**
-- C++20 standard library
-- OS APIs (inotify, FSEvents, WinAPI)
-
-## Integration
-
-Used by:
-
-- `wal`
-- `sync`
-- `store`
-- `metadata`
-
-## Rules
-
-- No business logic
-- No sync decisions
-- No side effects
-- Deterministic output
-
-## When to modify this module
-
-Only if:
-
-- It improves filesystem observation
-- It remains deterministic
-- It does not introduce coupling
-
-## Roadmap
-
-- [ ] Metadata enrichment (hash, permissions)
-- [ ] Ignore file support (`.softadastraignore`)
-- [ ] Incremental scanning
-- [ ] Watcher backpressure handling
-- [ ] Async event pipeline
-
-## Philosophy
-
-> The filesystem is not state.
-> It is a sequence of changes.
-
-## Summary
-
-- Cross-platform filesystem layer
-- Snapshot + diff model
-- Real-time watchers
-- Deterministic and portable
+`softadastra/fs` depends on `softadastra/core` and provides filesystem observation for higher-level modules.
 
 ## Installation
 
@@ -234,6 +85,55 @@ Only if:
 vix add @softadastra/fs
 ```
 
+## Usage
+
+```cpp
+#include <softadastra/fs/Fs.hpp>
+```
+
+## Example
+
+```cpp
+#include <softadastra/fs/Fs.hpp>
+#include <iostream>
+
+int main()
+{
+    auto root = softadastra::fs::path::Path::from("./data");
+
+    if (!root)
+    {
+        std::cout << "invalid path\n";
+        return 1;
+    }
+
+    auto snapshot = softadastra::fs::scanner::Scanner::scan(root.value());
+
+    if (!snapshot)
+    {
+        std::cout << "scan failed\n";
+        return 1;
+    }
+
+    for (const auto& [_, file] : snapshot.value().all())
+    {
+        std::cout << file.path.str() << "\n";
+    }
+
+    return 0;
+}
+```
+
+## Requirements
+
+- C++20
+- `softadastra/core`
+- Platform filesystem APIs when watcher backends are enabled
+
+## Documentation
+
+For the full documentation, visit [docs.softadastra.com](https://docs.softadastra.com).
+
 ## License
 
-Apache License 2.0
+Licensed under the Apache License, Version 2.0.

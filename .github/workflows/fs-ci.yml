@@ -1,0 +1,301 @@
+name: FS CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - dev
+      - release/**
+    paths:
+      - ".github/workflows/fs-ci.yml"
+      - "CMakeLists.txt"
+      - "cmake/**"
+      - "include/**"
+      - "src/**"
+      - "platform/**"
+      - "tests/**"
+      - "examples/**"
+      - "README.md"
+      - "CHANGELOG.md"
+      - "vix.json"
+
+  pull_request:
+    branches:
+      - main
+      - master
+      - dev
+      - release/**
+    paths:
+      - ".github/workflows/fs-ci.yml"
+      - "CMakeLists.txt"
+      - "cmake/**"
+      - "include/**"
+      - "src/**"
+      - "platform/**"
+      - "tests/**"
+      - "examples/**"
+      - "README.md"
+      - "CHANGELOG.md"
+      - "vix.json"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  BUILD_JOBS: 2
+  SOFTADASTRA_GIT_BRANCH: dev
+
+jobs:
+  build:
+    name: Build FS (${{ matrix.compiler }}, ${{ matrix.build_type }}, tests=${{ matrix.tests }}, examples=${{ matrix.examples }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler:
+          - gcc
+          - clang
+        build_type:
+          - Debug
+          - Release
+        tests:
+          - ON
+          - OFF
+        examples:
+          - ON
+          - OFF
+
+    steps:
+      - name: Checkout fs repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            ninja-build \
+            clang \
+            g++ \
+            pkg-config \
+            git \
+            ca-certificates
+
+      - name: Select compiler
+        run: |
+          if [ "${{ matrix.compiler }}" = "clang" ]; then
+            echo "CC=clang" >> "$GITHUB_ENV"
+            echo "CXX=clang++" >> "$GITHUB_ENV"
+          else
+            echo "CC=gcc" >> "$GITHUB_ENV"
+            echo "CXX=g++" >> "$GITHUB_ENV"
+          fi
+
+      - name: Fetch core dependency
+        run: |
+          set -euxo pipefail
+
+          rm -rf ../core
+          git clone --depth 1 --branch "${SOFTADASTRA_GIT_BRANCH}" https://github.com/softadastra/core.git ../core
+
+      - name: Build and install core dependency
+        run: |
+          set -euxo pipefail
+
+          cmake -S ../core -B ../core/build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_INSTALL_PREFIX="$PWD/.ci-deps" \
+            -DSOFTADASTRA_CORE_BUILD_TESTS=OFF \
+            -DSOFTADASTRA_WARNINGS_AS_ERRORS=ON
+
+          cmake --build ../core/build -j"${BUILD_JOBS}"
+          cmake --install ../core/build
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_PREFIX_PATH="$PWD/.ci-deps" \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DSOFTADASTRA_FS_BUILD_TESTS=${{ matrix.tests }} \
+            -DSOFTADASTRA_FS_BUILD_EXAMPLES=${{ matrix.examples }} \
+            -DSOFTADASTRA_WARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        run: |
+          cmake --build build -j"${BUILD_JOBS}"
+
+      - name: Run tests
+        if: matrix.tests == 'ON'
+        run: |
+          ctest --test-dir build --output-on-failure
+
+  install-check:
+    name: Install Package Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout fs repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            ninja-build \
+            g++ \
+            pkg-config \
+            git \
+            ca-certificates
+
+      - name: Fetch core dependency
+        run: |
+          set -euxo pipefail
+
+          rm -rf ../core
+          git clone --depth 1 --branch "${SOFTADASTRA_GIT_BRANCH}" https://github.com/softadastra/core.git ../core
+
+      - name: Build and install core dependency
+        run: |
+          set -euxo pipefail
+
+          cmake -S ../core -B ../core/build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$PWD/.ci-deps" \
+            -DSOFTADASTRA_CORE_BUILD_TESTS=OFF \
+            -DSOFTADASTRA_WARNINGS_AS_ERRORS=ON
+
+          cmake --build ../core/build -j"${BUILD_JOBS}"
+          cmake --install ../core/build
+
+      - name: Configure install build
+        run: |
+          cmake -S . -B build-install -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$PWD/.ci-deps" \
+            -DCMAKE_INSTALL_PREFIX="$PWD/.ci-install" \
+            -DSOFTADASTRA_FS_BUILD_TESTS=OFF \
+            -DSOFTADASTRA_FS_BUILD_EXAMPLES=OFF \
+            -DSOFTADASTRA_WARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        run: |
+          cmake --build build-install -j"${BUILD_JOBS}"
+
+      - name: Install
+        run: |
+          cmake --install build-install
+
+      - name: Verify installed package files
+        run: |
+          set -euxo pipefail
+
+          test -d .ci-install/include/softadastra
+          test -f .ci-install/lib/cmake/softadastra_fs/softadastra_fsConfig.cmake
+          test -f .ci-install/lib/cmake/softadastra_fs/softadastra_fsConfigVersion.cmake
+          test -f .ci-install/lib/cmake/softadastra_fs/softadastraFsTargets.cmake
+
+  static-analysis:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout fs repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            ninja-build \
+            clang \
+            g++ \
+            clang-tidy \
+            cppcheck \
+            pkg-config \
+            git \
+            ca-certificates
+
+      - name: Fetch core dependency
+        run: |
+          set -euxo pipefail
+
+          rm -rf ../core
+          git clone --depth 1 --branch "${SOFTADASTRA_GIT_BRANCH}" https://github.com/softadastra/core.git ../core
+
+      - name: Build and install core dependency
+        run: |
+          set -euxo pipefail
+
+          cmake -S ../core -B ../core/build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_INSTALL_PREFIX="$PWD/.ci-deps" \
+            -DSOFTADASTRA_CORE_BUILD_TESTS=OFF \
+            -DSOFTADASTRA_WARNINGS_AS_ERRORS=OFF
+
+          cmake --build ../core/build -j"${BUILD_JOBS}"
+          cmake --install ../core/build
+
+      - name: Configure for analysis
+        run: |
+          cmake -S . -B build-analyze -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_PREFIX_PATH="$PWD/.ci-deps" \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DSOFTADASTRA_FS_BUILD_TESTS=ON \
+            -DSOFTADASTRA_FS_BUILD_EXAMPLES=ON \
+            -DSOFTADASTRA_WARNINGS_AS_ERRORS=OFF
+
+      - name: Run clang-tidy
+        run: |
+          set +e
+          find src platform tests examples -name '*.cpp' -print0 2>/dev/null \
+            | xargs -0 -r -n1 -P2 clang-tidy -p build-analyze
+          exit 0
+
+      - name: Run cppcheck
+        run: |
+          set +e
+          cppcheck \
+            --enable=all \
+            --std=c++20 \
+            --inconclusive \
+            --quiet \
+            --suppress=missingIncludeSystem \
+            include/ src/ platform/ tests/ examples/ 2>/dev/null
+          exit 0
+
+  summary:
+    name: FS CI Summary
+    needs:
+      - build
+      - install-check
+      - static-analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Print summary
+        run: |
+          echo "Softadastra fs CI completed."
+          echo "- gcc and clang builds"
+          echo "- Debug and Release builds"
+          echo "- tests ON and OFF builds"
+          echo "- examples ON and OFF builds"
+          echo "- core dependency install validation"
+          echo "- fs package install verification"
+          echo "- static analysis"
